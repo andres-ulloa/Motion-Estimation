@@ -3,6 +3,8 @@ import numpy as np
 import cv2
 import math
 
+
+
 def showImage(img):
     cv2.imshow('img', img)
     cv2.waitKey(0)
@@ -30,13 +32,12 @@ def computeResiduals(frame, bg_model):
 
 
 def generateMeanBackground(video, from_i, to_i):
-    frame_height = video.read()[1].shape[1]
-    frame_width = video.read()[1].shape[0]
+    frame_height = video[0].shape[1]
+    frame_width = video[0].shape[0]
     numFrames = abs(from_i - to_i)
     mean_background = np.zeros((frame_width, frame_height), float)
-    video.set(cv2.CAP_PROP_POS_FRAMES,from_i)
     for i in range(from_i, to_i):
-        frame = video.read()[1]
+        frame = video[i]
         for j in range(0, mean_background.shape[0]):
             for k in range(0, mean_background.shape[1]):
                 mean_background[j,k] += frame[j,k,0] 
@@ -47,16 +48,15 @@ def generateMeanBackground(video, from_i, to_i):
 
 
 def generateMedianBackground(video, from_i, to_i):
-    frame_height = video.read()[1].shape[1]
-    frame_width = video.read()[1].shape[0]
+    frame_height = video[0].shape[1]
+    frame_width = video[0].shape[0]
     numFrames = abs(from_i - to_i)
     median_background = np.zeros((frame_width, frame_height), float)
     for i in range(0, median_background.shape[0]):
         for j in range(0, median_background.shape[1]):
             values_over_time = list()
-            video.set(cv2.CAP_PROP_POS_FRAMES,from_i)
             for k in range(from_i, to_i):
-                frame = video.read()[1]
+                frame = video[k]
                 values_over_time.append(frame[i,j,0])
             values_over_time.sort()
             median_background[i,j] = values_over_time[math.ceil(len(values_over_time)/2)]
@@ -93,36 +93,35 @@ def movement_detection(video, ground_truth, num_frames, background_substraction,
     print('\n-------------------------------------------------------------')
     print('\n\n-----------INITIALIAZING MOVEMENT DETECTION...-------.------')
     print('\n\n-----------------------------------------------------------\n')
-    video_length = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
+    video_length = len(video)
     background_model = background_substraction(video, 0, num_frames)
     true_positives = 0
     true_negatives = 0
     false_positives = 0
     false_negatives = 0
     accumulator = 0
-    ground_truth.set(cv2.CAP_PROP_POS_FRAMES,num_frames)
     print_flag = True
     for frame_index in range(num_frames, video_length - 1):
         accumulator += 1
-        frame = video.read()[1]
+        frame = video[frame_index]
         residual_frame = computeResiduals(frame, background_model)
         movement_mask = umbralize(residual_frame, thresh)
         if accumulator > spacing: 
-            print('Generated New Background Model...,\n')
+            print('Generated New Background Model...\n')
             background_model = background_substraction(video, frame_index - num_frames + 1, frame_index)
             accumulator = 0
-        frame_GT = umbralize_GT(ground_truth.read()[1])
+        frame_GT = umbralize_GT(ground_truth[frame_index])
         true_positives, true_negatives, false_positives, false_negatives  = compute_ROC_metrics(movement_mask, frame_GT, true_positives, true_negatives, false_positives, false_negatives)
         if accumulator > 350 and print_flag == True: 
+            print('Se han escrito resultados provisionales en la carpeta del proyecto...\n\n')
             cv2.imwrite('frame_vid.png ' ,frame)
             cv2.imwrite('bg.png ' ,background_model)
             cv2.imwrite('mask.png ' ,movement_mask)
             cv2.imwrite('res.png ' ,residual_frame)
             cv2.imwrite('frame_GT.png ' ,frame_GT)                  
-            input('Press enter to continue...\n')
+            input('Press enter to continue....\n')
             print_flag = False
-
-
+       
     print('\nDone.\n')
     print('\n-------------------------------------------------------------')
     print('\n-----------------GENERATING ROC METRICS----------------------')
@@ -196,9 +195,7 @@ def loadVideo(path):
 def main():
     video = loadVideo('togray.avi')
     ground_truth = loadVideo('highway_GT_460to869.avi')
-    video = cv2.VideoCapture('togray.avi')
-    ground_truth = cv2.VideoCapture('highway_GT_460to869.avi')
-    num_frames = 10
+    num_frames = 20
     mean_BG_subs = generateMeanBackground
     median_BG_subs = generateMedianBackground
     spacing = int(input('Cuantos frames recorrer antes de la generación de cada modelo de fondo?\n'))
